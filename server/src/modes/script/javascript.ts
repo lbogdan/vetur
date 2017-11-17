@@ -257,6 +257,28 @@ export function getJavascriptMode(
       return [];
     },
     findDefinition(doc: TextDocument, position: Position): Definition {
+
+      function textPositionAt(text: string, offset: number) {
+        let ln = 0;
+        let col = 0;
+        for (let i = 0; i < offset; i++) {
+          if (text[i] === '\n') {
+            ln += 1;
+            col = 0;
+          } else {
+            col += 1;
+          }
+        }
+        return Position.create(ln, col);
+      }
+
+      function textConvertRange(text: string, span: ts.TextSpan) {
+        return Range.create(
+          textPositionAt(text, span.start),
+          textPositionAt(text, span.start + span.length)
+        );
+      }
+
       const { scriptDoc, service } = updateCurrentTextDocument(doc);
       if (!languageServiceIncludesFile(service, doc.uri)) {
         return [];
@@ -270,11 +292,20 @@ export function getJavascriptMode(
 
       const definitionResults: Definition = [];
       definitions.forEach(d => {
-        const definitionTargetDoc = getScriptDocByFsPath(fileFsPath);
-        if (definitionTargetDoc) {
+        const uriFile = Uri.file(d.fileName);
+        if (uriFile.fsPath === fileFsPath) {
+          const definitionTargetDoc = getScriptDocByFsPath(fileFsPath);
+          if (definitionTargetDoc) {
+            definitionResults.push({
+              uri: uriFile.toString(),
+              range: convertRange(definitionTargetDoc, d.textSpan)
+            });
+          }
+        } else {
+          const text = service.getProgram().getSourceFile(d.fileName).text;
           definitionResults.push({
-            uri: Uri.file(d.fileName).toString(),
-            range: convertRange(definitionTargetDoc, d.textSpan)
+            uri: uriFile.toString(),
+            range: textConvertRange(text, d.textSpan)
           });
         }
       });
